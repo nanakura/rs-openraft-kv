@@ -1,22 +1,23 @@
-use std::sync::Arc;
+use anyhow::Context;
+use ntex::util::BytesMut;
+use ntex::web;
+use ntex::web::HttpResponse;
+use ntex::web::types::Payload;
 
 use openraft::error::CheckIsLeaderError;
 use openraft::error::Infallible;
-use tide::Body;
-use tide::Request;
-use tide::Response;
-use tide::StatusCode;
 
 use crate::app::App;
+use crate::network::err::HandlerResponse;
 use crate::Node;
 use crate::NodeId;
-use crate::Server;
 
-pub fn rest(app: &mut Server) {
-    let mut api = app.at("/api");
-    api.at("/write").post(write);
-    api.at("/read").post(read);
-    api.at("/consistent_read").post(consistent_read);
+
+
+pub fn rest(cfg: &mut web::ServiceConfig) {
+    cfg.route("/write", web::post().to(write))
+        .route("/read", web::post().to(read))
+        .route("/consistent_read", web::post().to(consistent_read));
 }
 /**
  * Application API
@@ -27,34 +28,47 @@ pub fn rest(app: &mut Server) {
  *  - `POST - /write` saves a value in a key and sync the nodes.
  *  - `POST - /read` attempt to find a value from a given key.
  */
-async fn write(mut req: Request<Arc<App>>) -> tide::Result {
-    let body = req.body_json().await?;
-    let res = req.state().raft.client_write(body).await;
-    Ok(Response::builder(StatusCode::Ok).body(Body::from_json(&res)?).build())
+async fn write(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+    let mut bytes = BytesMut::new();
+    while let Some(item) = ntex::util::stream_recv(&mut payload).await {
+        bytes.extend_from_slice(&item.unwrap());
+    }
+    let body = serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+    let res = state.raft.client_write(body).await.context("client write failed")?;
+    Ok(HttpResponse::Ok().json(&res))
 }
 
-async fn read(mut req: Request<Arc<App>>) -> tide::Result {
-    let key: String = req.body_json().await?;
-    let kvs = req.state().key_values.read().await;
+async fn read(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+    let mut bytes = BytesMut::new();
+    while let Some(item) = ntex::util::stream_recv(&mut payload).await {
+        bytes.extend_from_slice(&item.unwrap());
+    }
+    let key: String = serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+    let kvs = state.key_values.read().await;
     let value = kvs.get(&key);
 
     let res: Result<String, Infallible> = Ok(value.cloned().unwrap_or_default());
-    Ok(Response::builder(StatusCode::Ok).body(Body::from_json(&res)?).build())
+    Ok(HttpResponse::Ok().json(&res))
 }
 
-async fn consistent_read(mut req: Request<Arc<App>>) -> tide::Result {
-    let ret = req.state().raft.ensure_linearizable().await;
+async fn consistent_read(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+    let ret = state.raft.ensure_linearizable().await;
 
     match ret {
         Ok(_) => {
-            let key: String = req.body_json().await?;
-            let kvs = req.state().key_values.read().await;
+            let mut bytes = BytesMut::new();
+            while let Some(item) = ntex::util::stream_recv(&mut payload).await {
+                bytes.extend_from_slice(&item.unwrap());
+            }
+            let key: String = serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+            let kvs = state.key_values.read().await;
 
             let value = kvs.get(&key);
 
             let res: Result<String, CheckIsLeaderError<NodeId, Node>> = Ok(value.cloned().unwrap_or_default());
-            Ok(Response::builder(StatusCode::Ok).body(Body::from_json(&res)?).build())
+            Ok(HttpResponse::Ok().json(&res))
         }
-        e => Ok(Response::builder(StatusCode::Ok).body(Body::from_json(&e)?).build()),
+        e =>
+            Ok(HttpResponse::Ok().json(&e))
     }
 }

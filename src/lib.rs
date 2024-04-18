@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
+use ntex::web;
 
 use openraft::Config;
 use tokio::net::TcpListener;
@@ -68,7 +69,6 @@ pub mod typ {
 
 pub type ExampleRaft = openraft::Raft<TypeConfig>;
 
-type Server = tide::Server<Arc<App>>;
 
 pub async fn start_example_raft_node<P>(
     node_id: NodeId,
@@ -99,16 +99,16 @@ where
     // Create a local raft instance.
     let raft = openraft::Raft::new(node_id, config.clone(), network, log_store, state_machine_store).await.unwrap();
 
-    let app = Arc::new(App {
+    let app = App {
         id: node_id,
         api_addr: http_addr.clone(),
         rpc_addr: rpc_addr.clone(),
         raft,
         key_values: kvs,
         config,
-    });
+    };
 
-    let echo_service = Arc::new(network::raft::Raft::new(app.clone()));
+    let echo_service = Arc::new(network::raft::Raft::new(Arc::new(app.clone())));
 
     let server = toy_rpc::Server::builder().register(echo_service).build();
 
@@ -119,12 +119,17 @@ where
 
     // Create an application that will store all the instances created above, this will
     // be later used on the actix-web services.
-    let mut app: Server = tide::Server::with_state(app);
+    let _ = web::HttpServer::new(move || {
+        let app = app.clone();
+        let app = web::App::new()
+            .state(app)
+            .service(web::scope("/api").configure(api::rest))
+            .service(web::scope("/cluster").configure(management::rest));
+        app
+    })
+        .bind(http_addr)?
+        .run()
+        .await;
 
-    management::rest(&mut app);
-    api::rest(&mut app);
-
-    app.listen(http_addr).await?;
-    _ = handle.await;
     Ok(())
 }
