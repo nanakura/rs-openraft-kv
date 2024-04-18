@@ -28,7 +28,7 @@ pub fn rest(cfg: &mut web::ServiceConfig) {
  *  - `POST - /write` saves a value in a key and sync the nodes.
  *  - `POST - /read` attempt to find a value from a given key.
  */
-async fn write(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+async fn write(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
     let mut bytes = BytesMut::new();
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
@@ -38,7 +38,7 @@ async fn write(mut payload: Payload, mut state: web::types::State<App>) -> Handl
     Ok(HttpResponse::Ok().json(&res))
 }
 
-async fn read(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+async fn read(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
     let mut bytes = BytesMut::new();
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
@@ -51,7 +51,7 @@ async fn read(mut payload: Payload, mut state: web::types::State<App>) -> Handle
     Ok(HttpResponse::Ok().json(&res))
 }
 
-async fn consistent_read(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+async fn consistent_read(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
     let ret = state.raft.ensure_linearizable().await;
 
     match ret {

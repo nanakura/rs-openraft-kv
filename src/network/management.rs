@@ -28,7 +28,7 @@ pub fn rest(cfg: &mut web::ServiceConfig) {
 /// A Learner receives log replication from the leader but does not vote.
 /// This should be done before adding a node as a member into the cluster
 /// (by calling `change-membership`)
-async fn add_learner(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+async fn add_learner(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
     let mut bytes = BytesMut::new();
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
@@ -40,7 +40,7 @@ async fn add_learner(mut payload: Payload, mut state: web::types::State<App>) ->
 }
 
 /// Changes specified learners to members, or remove members.
-async fn change_membership(mut payload: Payload, mut state: web::types::State<App>) -> HandlerResponse {
+async fn change_membership(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
     let mut bytes = BytesMut::new();
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
@@ -51,7 +51,7 @@ async fn change_membership(mut payload: Payload, mut state: web::types::State<Ap
 }
 
 /// Initialize a single-node cluster.
-async fn init(mut state: web::types::State<App>) -> HandlerResponse {
+async fn init(state: web::types::State<App>) -> HandlerResponse {
     let mut nodes = BTreeMap::new();
     let node = Node {
         api_addr: state.api_addr.clone(),
@@ -64,7 +64,7 @@ async fn init(mut state: web::types::State<App>) -> HandlerResponse {
 }
 
 /// Get the latest metrics of the cluster
-async fn metrics(mut state: web::types::State<App>) -> HandlerResponse {
+async fn metrics(state: web::types::State<App>) -> HandlerResponse {
     let metrics = state.raft.metrics().borrow().clone();
 
     let res: Result<RaftMetrics<NodeId, Node>, Infallible> = Ok(metrics);

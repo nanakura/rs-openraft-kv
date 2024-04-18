@@ -131,5 +131,6 @@ where
         .run()
         .await;
 
+    _ = handle.await;
     Ok(())
 }
