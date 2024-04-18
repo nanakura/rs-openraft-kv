@@ -31,7 +31,7 @@ pub async fn write(mut payload: Payload, state: web::types::State<App>) -> Handl
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
     }
-    let body = serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+    let body = serde_json::from_slice(&bytes).context("deserialize json failed")?;
     let res = state
         .raft
         .client_write(body)
@@ -46,7 +46,7 @@ pub async fn read(mut payload: Payload, state: web::types::State<App>) -> Handle
         bytes.extend_from_slice(&item.unwrap());
     }
     let key: String =
-        serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+        serde_json::from_slice(&bytes).context("deserialize json failed")?;
     let kvs = state.key_values.read().await;
     let value = kvs.get(&key);
 
@@ -67,7 +67,7 @@ pub async fn consistent_read(
                 bytes.extend_from_slice(&item.unwrap());
             }
             let key: String =
-                serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
+                serde_json::from_slice(&bytes).context("deserialize json failed")?;
             let kvs = state.key_values.read().await;
 
             let value = kvs.get(&key);

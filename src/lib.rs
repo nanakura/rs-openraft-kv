@@ -1,8 +1,7 @@
 #![allow(clippy::uninlined_format_args)]
 #![deny(unused_qualifications)]
 
-use ntex::rt::spawn;
-use ntex::web;
+use ntex::{web};
 use std::fmt::Display;
 use std::io::Cursor;
 use std::path::Path;
@@ -11,6 +10,7 @@ use ntex::web::middleware;
 
 use openraft::Config;
 use tokio::net::TcpListener;
+use tracing::info;
 
 use crate::app::App;
 use crate::network::api::{consistent_read, read, write};
@@ -125,13 +125,15 @@ where
     let server = toy_rpc::Server::builder().register(echo_service).build();
 
     let listener = TcpListener::bind(rpc_addr).await.unwrap();
-    let handler = spawn(async move {
+    tokio::spawn(async move {
         server.accept_websocket(listener).await.unwrap();
+        info!("websocket server");
     });
 
     // Create an application that will store all the instances created above, this will
     // be later used on the actix-web services.
     let _ = web::HttpServer::new(move || {
+        info!("web server");
         let app = app.clone();
         web::App::new()
             .state(app)
@@ -139,6 +141,7 @@ where
             .route("/api/write", web::post().to(write))
             .route("/api/read", web::post().to(read))
             .route("/api/consistent_read", web::post().to(consistent_read))
+            .route("/api", web::get().to(|| async { web::HttpResponse::Ok().body("ok") }))
             .route("/cluster/add-learner", web::post().to(add_learner))
             .route(
                 "/cluster/change-membership",
@@ -147,9 +150,8 @@ where
             .route("/cluster/init", web::post().to(init))
             .route("/cluster/metrics", web::get().to(metrics))
     })
-    .bind(http_addr)?
-    .run()
-    .await;
-    let _ = handler.await;
+        .bind(http_addr).unwrap()
+        .run()
+        .await;
     Ok(())
 }
