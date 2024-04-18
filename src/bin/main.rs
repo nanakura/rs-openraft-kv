@@ -1,6 +1,6 @@
 use clap::Parser;
-use tracing_subscriber::EnvFilter;
 use raft_demo3::start_example_raft_node;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Clone, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -15,7 +15,7 @@ pub struct Opt {
     pub rpc_addr: String,
 }
 
-#[tokio::main]
+#[ntex::main]
 async fn main() -> std::io::Result<()> {
     // Setup the logger
     tracing_subscriber::fmt()
@@ -31,7 +31,7 @@ async fn main() -> std::io::Result<()> {
 
     start_example_raft_node(
         options.id,
-        format!("{}.db", options.rpc_addr),
+        format!("{}-db", options.id),
         options.http_addr,
         options.rpc_addr,
     )

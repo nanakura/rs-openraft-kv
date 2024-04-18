@@ -10,7 +10,7 @@ kill_all() {
         if pgrep -xq -- "${SERVICE}"; then
             pkill -f "${SERVICE}"
         fi
-        rm -r 127.0.0.1:*.db || echo "no db to clean"
+        rm -r *-db || echo "no db to clean"
     else
         set +e # killall will error if finds no process to kill
         killall "${SERVICE}"
@@ -51,9 +51,9 @@ echo "Killing all running raft-key-value-rocks and cleaning up old data"
 kill_all
 sleep 1
 
-if ls 127.0.0.1:*.db
+if ls *-db
 then
-    rm -r 127.0.0.1:*.db || echo "no db to clean"
+    rm -r *-db || echo "no db to clean"
 fi
 
 echo "Start 3 uninitialized raft-key-value-rocks servers..."
@@ -213,4 +213,4 @@ echo "Killing all nodes in 1s..."
 sleep 1
 kill_all
 
-rm -r 127.0.0.1:*.db
+rm -r *-db

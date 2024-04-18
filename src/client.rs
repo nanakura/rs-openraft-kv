@@ -47,7 +47,10 @@ impl ExampleClient {
     /// will be applied to state machine.
     ///
     /// The result of applying the request will be returned.
-    pub async fn write(&self, req: &Request) -> Result<typ::ClientWriteResponse, typ::RPCError<typ::ClientWriteError>> {
+    pub async fn write(
+        &self,
+        req: &Request,
+    ) -> Result<typ::ClientWriteResponse, typ::RPCError<typ::ClientWriteError>> {
         self.send_rpc_to_leader("api/write", Some(req)).await
     }
 
@@ -61,8 +64,12 @@ impl ExampleClient {
     /// Consistent Read value by key, in an inconsistent mode.
     ///
     /// This method MUST return consistent value or CheckIsLeaderError.
-    pub async fn consistent_read(&self, req: &String) -> Result<String, typ::RPCError<typ::CheckIsLeaderError>> {
-        self.do_send_rpc_to_leader("api/consistent_read", Some(req)).await
+    pub async fn consistent_read(
+        &self,
+        req: &String,
+    ) -> Result<String, typ::RPCError<typ::CheckIsLeaderError>> {
+        self.do_send_rpc_to_leader("api/consistent_read", Some(req))
+            .await
     }
 
     // --- Cluster management API
@@ -74,7 +81,8 @@ impl ExampleClient {
     /// Then setup replication with [`add_learner`].
     /// Then make the new node a member with [`change_membership`].
     pub async fn init(&self) -> Result<(), typ::RPCError<typ::InitializeError>> {
-        self.do_send_rpc_to_leader("cluster/init", Some(&Empty {})).await
+        self.do_send_rpc_to_leader("cluster/init", Some(&Empty {}))
+            .await
     }
 
     /// Add a node as learner.
@@ -84,7 +92,8 @@ impl ExampleClient {
         &self,
         req: (NodeId, String, String),
     ) -> Result<typ::ClientWriteResponse, typ::RPCError<typ::ClientWriteError>> {
-        self.send_rpc_to_leader("cluster/add-learner", Some(&req)).await
+        self.send_rpc_to_leader("cluster/add-learner", Some(&req))
+            .await
     }
 
     /// Change membership to the specified set of nodes.
@@ -95,7 +104,8 @@ impl ExampleClient {
         &self,
         req: &BTreeSet<NodeId>,
     ) -> Result<typ::ClientWriteResponse, typ::RPCError<typ::ClientWriteError>> {
-        self.send_rpc_to_leader("cluster/change-membership", Some(req)).await
+        self.send_rpc_to_leader("cluster/change-membership", Some(req))
+            .await
     }
 
     /// Get the metrics about the cluster.
@@ -104,7 +114,8 @@ impl ExampleClient {
     /// membership config, replication status etc.
     /// See [`RaftMetrics`].
     pub async fn metrics(&self) -> Result<RaftMetrics<NodeId, Node>, typ::RPCError> {
-        self.do_send_rpc_to_leader("cluster/metrics", None::<&()>).await
+        self.do_send_rpc_to_leader("cluster/metrics", None::<&()>)
+            .await
     }
 
     // --- Internal methods
@@ -151,7 +162,10 @@ impl ExampleClient {
             RPCError::Network(NetworkError::new(&e))
         })?;
 
-        let res: Result<Resp, Err> = resp.json().await.map_err(|e| RPCError::Network(NetworkError::new(&e)))?;
+        let res: Result<Resp, Err> = resp
+            .json()
+            .await
+            .map_err(|e| RPCError::Network(NetworkError::new(&e)))?;
         println!(
             "<<< client recv reply from {}: {}",
             url,
@@ -165,11 +179,19 @@ impl ExampleClient {
     ///
     /// If the target node is not a leader, a `ForwardToLeader` error will be
     /// returned and this client will retry at most 3 times to contact the updated leader.
-    async fn send_rpc_to_leader<Req, Resp, Err>(&self, uri: &str, req: Option<&Req>) -> Result<Resp, typ::RPCError<Err>>
+    async fn send_rpc_to_leader<Req, Resp, Err>(
+        &self,
+        uri: &str,
+        req: Option<&Req>,
+    ) -> Result<Resp, typ::RPCError<Err>>
     where
         Req: Serialize + 'static,
         Resp: Serialize + DeserializeOwned,
-        Err: std::error::Error + Serialize + DeserializeOwned + TryAsRef<typ::ForwardToLeader> + Clone,
+        Err: std::error::Error
+            + Serialize
+            + DeserializeOwned
+            + TryAsRef<typ::ForwardToLeader>
+            + Clone,
     {
         // Retry at most 3 times to find a valid leader.
         let mut n_retry = 3;

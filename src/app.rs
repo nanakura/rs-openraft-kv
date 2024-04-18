@@ -18,4 +18,3 @@ pub struct App {
     pub key_values: Arc<RwLock<BTreeMap<String, String>>>,
     pub config: Arc<Config>,
 }
-

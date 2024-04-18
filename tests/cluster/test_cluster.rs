@@ -26,7 +26,12 @@ pub fn log_panic(panic: &PanicInfo) {
             panic.line = location.line(),
             panic.column = location.column(),
         );
-        eprintln!("{}:{}:{}", location.file(), location.line(), location.column());
+        eprintln!(
+            "{}:{}:{}",
+            location.file(),
+            location.line(),
+            location.column()
+        );
     } else {
         tracing::error!(message = %panic, backtrace = %backtrace);
     }
@@ -80,18 +85,33 @@ async fn test_cluster() -> Result<(), Box<dyn std::error::Error>> {
     let handle = Handle::current();
     let handle_clone = handle.clone();
     let _h1 = thread::spawn(move || {
-        let x = handle_clone.block_on(start_example_raft_node(1, d1.path(), get_addr(1), get_rpc_addr(1)));
+        let x = handle_clone.block_on(start_example_raft_node(
+            1,
+            d1.path(),
+            get_addr(1),
+            get_rpc_addr(1),
+        ));
         println!("x: {:?}", x);
     });
 
     let handle_clone = handle.clone();
     let _h2 = thread::spawn(move || {
-        let x = handle_clone.block_on(start_example_raft_node(2, d2.path(), get_addr(2), get_rpc_addr(2)));
+        let x = handle_clone.block_on(start_example_raft_node(
+            2,
+            d2.path(),
+            get_addr(2),
+            get_rpc_addr(2),
+        ));
         println!("x: {:?}", x);
     });
 
     let _h3 = thread::spawn(move || {
-        let x = handle.block_on(start_example_raft_node(3, d3.path(), get_addr(3), get_rpc_addr(3)));
+        let x = handle.block_on(start_example_raft_node(
+            3,
+            d3.path(),
+            get_addr(3),
+            get_rpc_addr(3),
+        ));
         println!("x: {:?}", x);
     });
 
@@ -115,18 +135,28 @@ async fn test_cluster() -> Result<(), Box<dyn std::error::Error>> {
     // from the        leader.
 
     println!("=== add-learner 2");
-    let _x = leader.add_learner((2, get_addr(2), get_rpc_addr(2))).await?;
+    let _x = leader
+        .add_learner((2, get_addr(2), get_rpc_addr(2)))
+        .await?;
 
     println!("=== add-learner 3");
-    let _x = leader.add_learner((3, get_addr(3), get_rpc_addr(3))).await?;
+    let _x = leader
+        .add_learner((3, get_addr(3), get_rpc_addr(3)))
+        .await?;
 
     println!("=== metrics after add-learner");
     let x = leader.metrics().await?;
 
-    assert_eq!(&vec![btreeset![1]], x.membership_config.membership().get_joint_config());
+    assert_eq!(
+        &vec![btreeset![1]],
+        x.membership_config.membership().get_joint_config()
+    );
 
-    let nodes_in_cluster =
-        x.membership_config.nodes().map(|(nid, node)| (*nid, node.clone())).collect::<BTreeMap<_, _>>();
+    let nodes_in_cluster = x
+        .membership_config
+        .nodes()
+        .map(|(nid, node)| (*nid, node.clone()))
+        .collect::<BTreeMap<_, _>>();
     assert_eq!(
         btreemap! {
             1 => Node{rpc_addr: get_rpc_addr(1), api_addr: get_addr(1)},

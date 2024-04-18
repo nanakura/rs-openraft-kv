@@ -1,8 +1,8 @@
 pub mod api;
+mod err;
 pub mod management;
 pub mod raft;
 mod raft_network_impl;
-mod err;
 
 pub use raft_network_impl::Network;
 pub use raft_network_impl::NetworkConnection;

@@ -1,19 +1,20 @@
 #![allow(clippy::uninlined_format_args)]
 #![deny(unused_qualifications)]
 
+use ntex::rt::spawn;
+use ntex::web;
 use std::fmt::Display;
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
-use ntex::web;
+use ntex::web::middleware;
 
 use openraft::Config;
 use tokio::net::TcpListener;
-use tokio::task;
 
 use crate::app::App;
-use crate::network::api;
-use crate::network::management;
+use crate::network::api::{consistent_read, read, write};
+use crate::network::management::{add_learner, change_membership, init, metrics};
 use crate::network::Network;
 use crate::store::new_storage;
 use crate::store::Request;
@@ -34,7 +35,11 @@ pub struct Node {
 
 impl Display for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Node {{ rpc_addr: {}, api_addr: {} }}", self.rpc_addr, self.api_addr)
+        write!(
+            f,
+            "Node {{ rpc_addr: {}, api_addr: {} }}",
+            self.rpc_addr, self.api_addr
+        )
     }
 }
 
@@ -69,7 +74,6 @@ pub mod typ {
 
 pub type ExampleRaft = openraft::Raft<TypeConfig>;
 
-
 pub async fn start_example_raft_node<P>(
     node_id: NodeId,
     dir: P,
@@ -97,7 +101,15 @@ where
     let network = Network {};
 
     // Create a local raft instance.
-    let raft = openraft::Raft::new(node_id, config.clone(), network, log_store, state_machine_store).await.unwrap();
+    let raft = openraft::Raft::new(
+        node_id,
+        config.clone(),
+        network,
+        log_store,
+        state_machine_store,
+    )
+    .await
+    .unwrap();
 
     let app = App {
         id: node_id,
@@ -113,7 +125,7 @@ where
     let server = toy_rpc::Server::builder().register(echo_service).build();
 
     let listener = TcpListener::bind(rpc_addr).await.unwrap();
-    let handle = task::spawn(async move {
+    let handler = spawn(async move {
         server.accept_websocket(listener).await.unwrap();
     });
 
@@ -121,16 +133,23 @@ where
     // be later used on the actix-web services.
     let _ = web::HttpServer::new(move || {
         let app = app.clone();
-        let app = web::App::new()
+        web::App::new()
             .state(app)
-            .service(web::scope("/api").configure(api::rest))
-            .service(web::scope("/cluster").configure(management::rest));
-        app
+            .wrap(middleware::Logger::default())
+            .route("/api/write", web::post().to(write))
+            .route("/api/read", web::post().to(read))
+            .route("/api/consistent_read", web::post().to(consistent_read))
+            .route("/cluster/add-learner", web::post().to(add_learner))
+            .route(
+                "/cluster/change-membership",
+                web::post().to(change_membership),
+            )
+            .route("/cluster/init", web::post().to(init))
+            .route("/cluster/metrics", web::get().to(metrics))
     })
-        .bind(http_addr)?
-        .run()
-        .await;
-
-    _ = handle.await;
+    .bind(http_addr)?
+    .run()
+    .await;
+    let _ = handler.await;
     Ok(())
 }
