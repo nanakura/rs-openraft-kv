@@ -3,8 +3,11 @@ name = "raft-demo3"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[[bin]]
+name = "raft-key-value-rocks"
+path = "src/bin/main.rs"
 
+[dependencies]
 tokio = { version = "1.35.1", features = ["full"] }
 byteorder = "1.4.3"
 clap = { version = "4.1.11", features = ["derive", "env"] }
