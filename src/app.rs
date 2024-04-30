@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use openraft::Config;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::ExampleRaft;
 use crate::NodeId;
@@ -17,4 +17,5 @@ pub struct App {
     pub raft: ExampleRaft,
     pub key_values: Arc<RwLock<BTreeMap<String, String>>>,
     pub config: Arc<Config>,
+    pub nodes: Arc<Mutex<BTreeSet<NodeId>>>,
 }

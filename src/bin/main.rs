@@ -13,6 +13,9 @@ pub struct Opt {
 
     #[clap(long)]
     pub rpc_addr: String,
+
+    #[clap(long)]
+    pub leader_http_addr: Option<String>,
 }
 
 #[ntex::main]
@@ -34,6 +37,6 @@ async fn main() -> std::io::Result<()> {
         format!("{}-db", options.id),
         options.http_addr,
         options.rpc_addr,
-    )
-    .await
+        options.leader_http_addr,
+    ).await
 }
