@@ -32,13 +32,11 @@ async fn main() -> std::io::Result<()> {
     // Parse the parameters passed by arguments.
     let options = Opt::parse();
 
-    let start_server = start_example_raft_node(
+    start_example_raft_node(
         options.id,
         format!("{}-db", options.id),
         options.http_addr,
         options.rpc_addr,
         options.leader_http_addr,
-    );
-
-    start_server.await
+    ).await
 }
