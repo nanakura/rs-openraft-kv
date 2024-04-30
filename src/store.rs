@@ -27,13 +27,9 @@ use openraft::StorageError;
 use openraft::StorageIOError;
 use openraft::StoredMembership;
 use openraft::Vote;
-use rocksdb::ColumnFamily;
-use rocksdb::ColumnFamilyDescriptor;
-use rocksdb::Direction;
-use rocksdb::Options;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
+use sled::Db;
 use tokio::sync::RwLock;
 
 use crate::typ;
@@ -85,7 +81,7 @@ pub struct StateMachineStore {
     snapshot_idx: u64,
 
     /// State machine stores snapshot in db.
-    db: Arc<DB>,
+    db: Arc<Db>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,7 +131,7 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
 }
 
 impl StateMachineStore {
-    async fn new(db: Arc<DB>) -> Result<StateMachineStore, StorageError<NodeId>> {
+    async fn new(db: Arc<Db>) -> Result<StateMachineStore, StorageError<NodeId>> {
         let mut sm = Self {
             data: StateMachineData {
                 last_applied_log_id: None,
@@ -171,8 +167,8 @@ impl StateMachineStore {
 
     fn get_current_snapshot_(&self) -> StorageResult<Option<StoredSnapshot>> {
         Ok(self
-            .db
-            .get_cf(self.store(), b"snapshot")
+            .store()
+            .get(b"snapshot")
             .map_err(|e| StorageError::IO {
                 source: StorageIOError::read(&e),
             })?
@@ -180,12 +176,8 @@ impl StateMachineStore {
     }
 
     fn set_current_snapshot_(&self, snap: StoredSnapshot) -> StorageResult<()> {
-        self.db
-            .put_cf(
-                self.store(),
-                b"snapshot",
-                serde_json::to_vec(&snap).unwrap().as_slice(),
-            )
+        self.store()
+            .insert(b"snapshot", serde_json::to_vec(&snap).unwrap().as_slice())
             .map_err(|e| StorageError::IO {
                 source: StorageIOError::write_snapshot(Some(snap.meta.signature()), &e),
             })?;
@@ -202,13 +194,13 @@ impl StateMachineStore {
         verb: ErrorVerb,
     ) -> Result<(), StorageIOError<NodeId>> {
         self.db
-            .flush_wal(true)
+            .flush()
             .map_err(|e| StorageIOError::new(subject, verb, AnyError::new(&e)))?;
         Ok(())
     }
 
-    fn store(&self) -> &ColumnFamily {
-        self.db.cf_handle("store").unwrap()
+    fn store(&self) -> sled::Tree {
+        self.db.open_tree("store").unwrap()
     }
 }
 
@@ -298,7 +290,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
 
 #[derive(Debug, Clone)]
 pub struct LogStore {
-    db: Arc<DB>,
+    db: Arc<Db>,
 }
 type StorageResult<T> = Result<T, StorageError<NodeId>>;
 
@@ -315,12 +307,12 @@ fn bin_to_id(buf: &[u8]) -> u64 {
 }
 
 impl LogStore {
-    fn store(&self) -> &ColumnFamily {
-        self.db.cf_handle("store").unwrap()
+    fn store(&self) -> sled::Tree {
+        self.db.open_tree("store").unwrap()
     }
 
-    fn logs(&self) -> &ColumnFamily {
-        self.db.cf_handle("logs").unwrap()
+    fn logs(&self) -> sled::Tree {
+        self.db.open_tree("logs").unwrap()
     }
 
     fn flush(
@@ -329,23 +321,22 @@ impl LogStore {
         verb: ErrorVerb,
     ) -> Result<(), StorageIOError<NodeId>> {
         self.db
-            .flush_wal(true)
+            .flush()
             .map_err(|e| StorageIOError::new(subject, verb, AnyError::new(&e)))?;
         Ok(())
     }
 
     fn get_last_purged_(&self) -> StorageResult<Option<LogId<u64>>> {
         Ok(self
-            .db
-            .get_cf(self.store(), b"last_purged_log_id")
+            .store()
+            .get(b"last_purged_log_id")
             .map_err(|e| StorageIOError::read(&e))?
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
     fn set_last_purged_(&self, log_id: LogId<u64>) -> StorageResult<()> {
-        self.db
-            .put_cf(
-                self.store(),
+        self.store()
+            .insert(
                 b"last_purged_log_id",
                 serde_json::to_vec(&log_id).unwrap().as_slice(),
             )
@@ -361,8 +352,8 @@ impl LogStore {
     ) -> Result<(), StorageIOError<NodeId>> {
         let json = serde_json::to_vec(committed).unwrap();
 
-        self.db
-            .put_cf(self.store(), b"committed", json)
+        self.store()
+            .insert(b"committed", json)
             .map_err(|e| StorageIOError::write(&e))?;
 
         self.flush(ErrorSubject::Store, ErrorVerb::Write)?;
@@ -371,8 +362,8 @@ impl LogStore {
 
     fn get_committed_(&self) -> StorageResult<Option<LogId<NodeId>>> {
         Ok(self
-            .db
-            .get_cf(self.store(), b"committed")
+            .store()
+            .get(b"committed")
             .map_err(|e| StorageError::IO {
                 source: StorageIOError::read(&e),
             })?
@@ -380,8 +371,8 @@ impl LogStore {
     }
 
     fn set_vote_(&self, vote: &Vote<NodeId>) -> StorageResult<()> {
-        self.db
-            .put_cf(self.store(), b"vote", serde_json::to_vec(vote).unwrap())
+        self.store()
+            .insert(b"vote", serde_json::to_vec(vote).unwrap())
             .map_err(|e| StorageError::IO {
                 source: StorageIOError::write_vote(&e),
             })?;
@@ -392,8 +383,8 @@ impl LogStore {
 
     fn get_vote_(&self) -> StorageResult<Option<Vote<NodeId>>> {
         Ok(self
-            .db
-            .get_cf(self.store(), b"vote")
+            .store()
+            .get(b"vote")
             .map_err(|e| StorageError::IO {
                 source: StorageIOError::write_vote(&e),
             })?
@@ -411,11 +402,9 @@ impl RaftLogReader<TypeConfig> for LogStore {
             std::ops::Bound::Excluded(x) => id_to_bin(*x + 1),
             std::ops::Bound::Unbounded => id_to_bin(0),
         };
-        self.db
-            .iterator_cf(
-                self.logs(),
-                rocksdb::IteratorMode::From(&start, Direction::Forward),
-            )
+        let logs_tree = self.logs();
+        logs_tree
+            .range::<&[u8], _>(start.as_slice()..)
             .map(|res| {
                 let (id, val) = res.unwrap();
                 let entry: StorageResult<Entry<_>> =
@@ -438,14 +427,17 @@ impl RaftLogStorage<TypeConfig> for LogStore {
 
     async fn get_log_state(&mut self) -> StorageResult<LogState<TypeConfig>> {
         let last = self
-            .db
-            .iterator_cf(self.logs(), rocksdb::IteratorMode::End)
-            .next()
+            .logs()
+            .last()
+            .map_err(|e| StorageError::IO {
+                source: StorageIOError::read_logs(&e),
+            })?
             .and_then(|res| {
-                let (_, ent) = res.unwrap();
+                let (_, ent) = res;
                 Some(
                     serde_json::from_slice::<Entry<TypeConfig>>(&ent)
-                        .ok()?
+                        .ok()
+                        .unwrap()
                         .log_id,
                 )
             });
@@ -493,9 +485,8 @@ impl RaftLogStorage<TypeConfig> for LogStore {
         for entry in entries {
             let id = id_to_bin(entry.log_id.index);
             assert_eq!(bin_to_id(&id), entry.log_id.index);
-            self.db
-                .put_cf(
-                    self.logs(),
+            self.logs()
+                .insert(
                     id,
                     serde_json::to_vec(&entry).map_err(|e| StorageIOError::write_logs(&e))?,
                 )
@@ -511,10 +502,18 @@ impl RaftLogStorage<TypeConfig> for LogStore {
     async fn truncate(&mut self, log_id: LogId<NodeId>) -> StorageResult<()> {
         tracing::debug!("delete_log: [{:?}, +oo)", log_id);
 
+        let logs_tree = self.logs();
         let from = id_to_bin(log_id.index);
         let to = id_to_bin(0xff_ff_ff_ff_ff_ff_ff_ff);
-        self.db
-            .delete_range_cf(self.logs(), &from, &to)
+        let entries = logs_tree.range::<&[u8], _>(from.as_slice()..to.as_slice());
+        let mut batch_del = sled::Batch::default();
+        for entry_res in entries {
+            let (key, _) = entry_res.expect("Read db entry failed");
+            batch_del.remove(key);
+        }
+
+        logs_tree
+            .apply_batch(batch_del)
             .map_err(|e| StorageIOError::write_logs(&e).into())
     }
 
@@ -522,11 +521,19 @@ impl RaftLogStorage<TypeConfig> for LogStore {
     async fn purge(&mut self, log_id: LogId<NodeId>) -> Result<(), StorageError<NodeId>> {
         tracing::debug!("delete_log: [0, {:?}]", log_id);
 
+        let logs_tree = self.logs();
         self.set_last_purged_(log_id)?;
         let from = id_to_bin(0);
         let to = id_to_bin(log_id.index + 1);
-        self.db
-            .delete_range_cf(self.logs(), &from, &to)
+        let entries = logs_tree.range::<&[u8], _>(from.as_slice()..to.as_slice());
+        let mut batch_del = sled::Batch::default();
+        for entry_res in entries {
+            let (key, _) = entry_res.expect("Read db entry failed");
+            batch_del.remove(key);
+        }
+
+        logs_tree
+            .apply_batch(batch_del)
             .map_err(|e| StorageIOError::write_logs(&e).into())
     }
 
@@ -536,14 +543,7 @@ impl RaftLogStorage<TypeConfig> for LogStore {
 }
 
 pub(crate) async fn new_storage<P: AsRef<Path>>(db_path: P) -> (LogStore, StateMachineStore) {
-    let mut db_opts = Options::default();
-    db_opts.create_missing_column_families(true);
-    db_opts.create_if_missing(true);
-
-    let store = ColumnFamilyDescriptor::new("store", Options::default());
-    let logs = ColumnFamilyDescriptor::new("logs", Options::default());
-
-    let db = DB::open_cf_descriptors(&db_opts, db_path, vec![store, logs]).unwrap();
+    let db = sled::open(db_path).unwrap();
     let db = Arc::new(db);
 
     let log_store = LogStore { db: db.clone() };

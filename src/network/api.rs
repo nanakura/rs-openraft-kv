@@ -45,8 +45,7 @@ pub async fn read(mut payload: Payload, state: web::types::State<App>) -> Handle
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
     }
-    let key: String =
-        serde_json::from_slice(&bytes).context("deserialize json failed")?;
+    let key: String = serde_json::from_slice(&bytes).context("deserialize json failed")?;
     let kvs = state.key_values.read().await;
     let value = kvs.get(&key);
 
@@ -66,8 +65,7 @@ pub async fn consistent_read(
             while let Some(item) = ntex::util::stream_recv(&mut payload).await {
                 bytes.extend_from_slice(&item.unwrap());
             }
-            let key: String =
-                serde_json::from_slice(&bytes).context("deserialize json failed")?;
+            let key: String = serde_json::from_slice(&bytes).context("deserialize json failed")?;
             let kvs = state.key_values.read().await;
 
             let value = kvs.get(&key);
