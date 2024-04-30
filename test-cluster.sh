@@ -75,7 +75,7 @@ sleep 1
 echo "Initialize server 1 as a single-node cluster"
 sleep 2
 echo
-rpc 21001/cluster/init '{}'
+#rpc 21001/cluster/init '{}'
 
 echo "Server 1 is a leader now"
 
@@ -92,11 +92,11 @@ echo "Adding node 2 and node 3 as learners, to receive log from leader node 1"
 
 sleep 1
 echo
-rpc 21001/cluster/add-learner       '[2, "127.0.0.1:21002", "127.0.0.1:22002"]'
+#rpc 21001/cluster/add-learner       '[2, "127.0.0.1:21002", "127.0.0.1:22002"]'
 echo "Node 2 added as leaner"
 sleep 1
 echo
-rpc 21001/cluster/add-learner       '[3, "127.0.0.1:21003", "127.0.0.1:22003"]'
+#rpc 21001/cluster/add-learner       '[3, "127.0.0.1:21003", "127.0.0.1:22003"]'
 echo "Node 3 added as leaner"
 sleep 1
 
@@ -108,7 +108,7 @@ sleep 1
 
 echo "Changing membership from [1] to 3 nodes cluster: [1, 2, 3]"
 echo
-rpc 21001/cluster/change-membership '[1, 2, 3]'
+#rpc 21001/cluster/change-membership '[1, 2, 3]'
 sleep 1
 echo "Membership changed"
 sleep 1
