@@ -13,6 +13,9 @@ pub struct Opt {
 
     #[clap(long)]
     pub rpc_addr: String,
+
+    #[clap(long)]
+    pub leader_http_addr: Option<String>,
 }
 
 #[ntex::main]
@@ -29,11 +32,13 @@ async fn main() -> std::io::Result<()> {
     // Parse the parameters passed by arguments.
     let options = Opt::parse();
 
-    start_example_raft_node(
+    let start_server = start_example_raft_node(
         options.id,
         format!("{}-db", options.id),
         options.http_addr,
         options.rpc_addr,
-    )
-    .await
+        options.leader_http_addr,
+    );
+
+    start_server.await
 }
