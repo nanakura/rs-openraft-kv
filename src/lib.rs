@@ -1,12 +1,12 @@
 #![allow(clippy::uninlined_format_args)]
 #![deny(unused_qualifications)]
 
-use ntex::{web};
+use ntex::web;
+use ntex::web::middleware;
 use std::fmt::Display;
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
-use ntex::web::middleware;
 
 use openraft::Config;
 use tokio::net::TcpListener;
@@ -141,7 +141,10 @@ where
             .route("/api/write", web::post().to(write))
             .route("/api/read", web::post().to(read))
             .route("/api/consistent_read", web::post().to(consistent_read))
-            .route("/api", web::get().to(|| async { web::HttpResponse::Ok().body("ok") }))
+            .route(
+                "/api",
+                web::get().to(|| async { web::HttpResponse::Ok().body("ok") }),
+            )
             .route("/cluster/add-learner", web::post().to(add_learner))
             .route(
                 "/cluster/change-membership",
@@ -150,8 +153,9 @@ where
             .route("/cluster/init", web::post().to(init))
             .route("/cluster/metrics", web::get().to(metrics))
     })
-        .bind(http_addr).unwrap()
-        .run()
-        .await;
+    .bind(http_addr)
+    .unwrap()
+    .run()
+    .await;
     Ok(())
 }
