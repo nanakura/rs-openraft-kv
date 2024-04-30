@@ -153,7 +153,7 @@ where
     let client = reqwest::Client::new();
     if let Some(addr) = leader_http_addr {
         let response = client
-            .post(format!("{}/cluster/add-learner", addr))
+            .post(format!("http://{}/cluster/add-learner", addr))
             .body(format!(
                 "[{}, \"{}\", \"{}\"]",
                 node_id, http_addr, rpc_addr
@@ -163,7 +163,7 @@ where
             .unwrap();
         info!("cluster add learner resp status {}", response.status());
         let response = client
-            .post(format!("{}/cluster/change-membership", addr))
+            .post(format!("http://{}/cluster/change-membership", addr))
             .send()
             .await
             .unwrap();
@@ -173,7 +173,7 @@ where
         );
     } else {
         let response = client
-            .post(format!("{}/cluster/init", http_addr))
+            .post(format!("http://{}/cluster/init", http_addr))
             .body("{}")
             .send()
             .await
