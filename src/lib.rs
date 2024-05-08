@@ -6,16 +6,18 @@ use ntex::web::middleware;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::io::Cursor;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use openraft::Config;
-use tokio::net::TcpListener;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tracing::info;
 
 use crate::app::App;
+use crate::network::raft::Raft;
 use crate::network::{api, management, Network};
 use crate::store::new_storage;
 use crate::store::Request;
@@ -125,14 +127,16 @@ where
         nodes: Arc::new(Mutex::new(set)),
     };
 
-    let echo_service = Arc::new(network::raft::Raft::new(Arc::new(app.clone())));
-
-    let server = toy_rpc::Server::builder().register(echo_service).build();
-
-    let listener = TcpListener::bind(&rpc_addr).await.unwrap();
+    let addr: SocketAddr = rpc_addr.parse().unwrap();
+    let raft_node = Raft::new(Arc::new(app.clone()));
     tokio::spawn(async move {
-        server.accept_websocket(listener).await.unwrap();
+        let addr = volo::net::Address::from(addr);
+
         info!("websocket server");
+        volo_gen::rpc::raft::RaftServiceServer::new(raft_node)
+            .run(addr)
+            .await
+            .unwrap();
     });
 
     // Create an application that will store all the instances created above, this will
@@ -151,7 +155,7 @@ where
     .unwrap()
     .run();
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(1)).await; 
     let client = reqwest::Client::new();
     if let Some(addr) = leader_http_addr {
         let response = client
