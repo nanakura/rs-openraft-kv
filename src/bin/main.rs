@@ -38,5 +38,6 @@ async fn main() -> std::io::Result<()> {
         options.http_addr,
         options.rpc_addr,
         options.leader_http_addr,
-    ).await
+    )
+    .await
 }

@@ -6,15 +6,16 @@ use ntex::web::middleware;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::io::Cursor;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
 use openraft::Config;
-use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::app::App;
+use crate::network::raft::Raft;
 use crate::network::{api, management, Network};
 use crate::store::new_storage;
 use crate::store::Request;
@@ -124,14 +125,16 @@ where
         nodes: Arc::new(Mutex::new(set)),
     };
 
-    let echo_service = Arc::new(network::raft::Raft::new(Arc::new(app.clone())));
-
-    let server = toy_rpc::Server::builder().register(echo_service).build();
-
-    let listener = TcpListener::bind(&rpc_addr).await.unwrap();
+    let addr: SocketAddr = rpc_addr.parse().unwrap();
+    let raft_node = Raft::new(Arc::new(app.clone()));
     tokio::spawn(async move {
-        server.accept_websocket(listener).await.unwrap();
+        let addr = volo::net::Address::from(addr);
+
         info!("websocket server");
+        volo_gen::rpc::raft::RaftServiceServer::new(raft_node)
+            .run(addr)
+            .await
+            .unwrap();
     });
 
     // Create an application that will store all the instances created above, this will
