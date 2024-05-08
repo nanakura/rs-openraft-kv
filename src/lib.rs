@@ -9,9 +9,11 @@ use std::io::Cursor;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use openraft::Config;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tracing::info;
 
 use crate::app::App;
@@ -153,6 +155,7 @@ where
     .unwrap()
     .run();
 
+    sleep(Duration::from_secs(1)).await; 
     let client = reqwest::Client::new();
     if let Some(addr) = leader_http_addr {
         let response = client
