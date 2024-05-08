@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use openraft::Config;
 use tokio::net::TcpListener;
@@ -150,6 +151,7 @@ where
     .unwrap()
     .run();
 
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let client = reqwest::Client::new();
     if let Some(addr) = leader_http_addr {
         let response = client
