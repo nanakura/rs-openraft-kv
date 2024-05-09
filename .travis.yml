@@ -1,0 +1,30 @@
+branches:
+  only:
+    - main
+
+arch:
+  - amd64
+  - arm64
+
+os:
+  - linux
+  - osx
+
+language: rust
+
+rust:
+  - stable
+  - nightly
+  - 1.75.0 # MSRV
+
+jobs:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
+
+# cache: cargo
+## FIXME: It seems that travis hangs on this step. Why?
+
+script:
+  - cargo build --verbose
+  - cargo test --all-features -- --test-threads=1
