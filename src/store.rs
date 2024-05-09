@@ -95,43 +95,6 @@ pub struct StateMachineData {
     pub kvs: Arc<RwLock<BTreeMap<String, String>>>,
 }
 
-fn read_sm_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::read_state_machine(&e)
-}
-fn write_sm_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::write_state_machine(&e)
-}
-fn read_snap_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::read(&e)
-}
-fn write_snap_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::write(&e)
-}
-fn read_vote_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::read_vote(&e)
-}
-fn write_vote_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::write_vote(&e)
-}
-fn read_logs_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::read_logs(&e)
-}
-fn write_logs_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::write_logs(&e)
-}
-fn read_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::read(&e)
-}
-fn write_err<E: Error + 'static>(e: E) -> StorageIOError<NodeId> {
-    StorageIOError::write(&e)
-}
-
-fn conflictable_txn_err<E: Error + 'static>(
-    e: E,
-) -> sled::transaction::ConflictableTransactionError<AnyError> {
-    sled::transaction::ConflictableTransactionError::Abort(AnyError::new(&e))
-}
-
 impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, StorageError<NodeId>> {
         let last_applied_log = self.data.last_applied_log_id;
