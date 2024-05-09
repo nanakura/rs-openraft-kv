@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::RangeBounds;

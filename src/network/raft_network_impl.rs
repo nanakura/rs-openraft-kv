@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::net::SocketAddr;
 
 use openraft::error::InstallSnapshotError;
@@ -32,14 +31,12 @@ impl RaftNetworkFactory<TypeConfig> for Network {
     #[tracing::instrument(level = "debug", skip_all)]
     async fn new_client(&mut self, target: NodeId, node: &Node) -> Self::Network {
         let addr: SocketAddr = node.rpc_addr.parse().unwrap();
-        let saddr = format!("ws://{}", node.rpc_addr);
 
         let client = volo_gen::rpc::raft::RaftServiceClientBuilder::new("raft-service")
             .address(addr)
             .build();
 
         NetworkConnection {
-            addr: saddr,
             client,
             target,
         }
@@ -47,7 +44,6 @@ impl RaftNetworkFactory<TypeConfig> for Network {
 }
 
 pub struct NetworkConnection {
-    addr: String,
     client: volo_gen::rpc::raft::RaftServiceClient,
     target: NodeId,
 }
@@ -57,42 +53,14 @@ impl NetworkConnection {
         &mut self,
     ) -> Result<&volo_gen::rpc::raft::RaftServiceClient, RPCError<NodeId, Node, E>> {
         Ok(&self.client)
-        // .ok_or_else(|| RPCError::Network(NetworkError::from(AnyError::default())))
     }
 }
-
-#[derive(Debug)]
-struct ErrWrap(Box<dyn std::error::Error>);
-
-impl Display for ErrWrap {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::error::Error for ErrWrap {}
 
 fn to_error<E: std::error::Error + 'static + Clone>(
     e: ClientError,
-    target: NodeId,
+    _target: NodeId,
 ) -> RPCError<NodeId, Node, E> {
     RPCError::Network(NetworkError::new(&e))
-    // match e {
-    //     toy_rpc::Error::IoError(e) => RPCError::Network(NetworkError::new(&e)),
-    //     toy_rpc::Error::ParseError(e) => RPCError::Network(NetworkError::new(&ErrWrap(e))),
-    //     toy_rpc::Error::Internal(e) => {
-    //         let any: &dyn Any = &e;
-    //         let error: &E = any.downcast_ref().unwrap();
-    //         RPCError::RemoteError(RemoteError::new(target, error.clone()))
-    //     }
-    //     e @ (toy_rpc::Error::InvalidArgument
-    //     | toy_rpc::Error::ServiceNotFound
-    //     | toy_rpc::Error::MethodNotFound
-    //     | toy_rpc::Error::ExecutionError(_)
-    //     | toy_rpc::Error::Canceled(_)
-    //     | toy_rpc::Error::Timeout(_)
-    //     | toy_rpc::Error::MaxRetriesReached(_)) => RPCError::Network(NetworkError::new(&e)),
-    // }
 }
 
 // With nightly-2023-12-20, and `err(Debug)` in the instrument macro, this gives the following lint

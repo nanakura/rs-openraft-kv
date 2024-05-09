@@ -155,7 +155,7 @@ where
     .unwrap()
     .run();
 
-    sleep(Duration::from_secs(1)).await; 
+    sleep(Duration::from_secs(1)).await;
     let client = reqwest::Client::new();
     if let Some(addr) = leader_http_addr {
         let response = client
