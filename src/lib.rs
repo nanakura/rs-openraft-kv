@@ -10,10 +10,10 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
+use ntex::time::sleep;
 
 use openraft::Config;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 use tracing::info;
 
 use crate::app::{HttpServerApp, RaftState, RAFT_CLIENT};

@@ -22,8 +22,8 @@ pub struct Opt {
 async fn start_http_server(options: Opt) -> std::io::Result<()> {
     start_ntex(
         options.id,
-        format!("{}-db", options.id),
         options.http_addr,
+        options.rpc_addr,
         options.leader_http_addr,
     )
     .await
@@ -31,6 +31,9 @@ async fn start_http_server(options: Opt) -> std::io::Result<()> {
 
 #[tokio::main]
 async fn start_raft_server(options: Opt) -> std::io::Result<()> {
+    tokio::spawn(async { 
+        mq_handler();
+    });
     start_example_raft_node(
         options.id,
         format!("{}-db", options.id),
