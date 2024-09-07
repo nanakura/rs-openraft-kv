@@ -16,7 +16,10 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::info;
 
-use crate::app::App;
+use crate::app::{HttpServerApp, RaftState, RAFT_CLIENT};
+pub use crate::mq::mq_handler;
+use crate::mq::send_task;
+use crate::mq::MqTask::InitNodeReq;
 use crate::network::raft::Raft;
 use crate::network::{api, management, Network};
 use crate::store::new_storage;
@@ -25,6 +28,7 @@ use crate::store::Response;
 
 pub mod app;
 pub mod client;
+mod mq;
 pub mod network;
 pub mod store;
 
@@ -82,7 +86,6 @@ pub async fn start_example_raft_node<P>(
     dir: P,
     http_addr: String,
     rpc_addr: String,
-    leader_http_addr: Option<String>,
 ) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -98,8 +101,6 @@ where
 
     let (log_store, state_machine_store) = new_storage(&dir).await;
 
-    let kvs = state_machine_store.data.kvs.clone();
-
     // Create the network layer that will connect and communicate the raft instances and
     // will be used in conjunction with the store created above.
     let network = Network {};
@@ -114,39 +115,51 @@ where
     )
     .await
     .unwrap();
+    RAFT_CLIENT.get_or_init(|| raft.clone());
 
     let mut set = BTreeSet::new();
     set.insert(node_id);
-    let app = App {
+    let app = RaftState {
         id: node_id,
         api_addr: http_addr.clone(),
         rpc_addr: rpc_addr.clone(),
         raft,
-        key_values: kvs,
         config,
         nodes: Arc::new(Mutex::new(set)),
     };
 
     let addr: SocketAddr = rpc_addr.parse().unwrap();
     let raft_node = Raft::new(Arc::new(app.clone()));
-    tokio::spawn(async move {
-        let addr = volo::net::Address::from(addr);
+    let addr = volo::net::Address::from(addr);
 
-        info!("websocket server");
-        volo_gen::rpc::raft::RaftServiceServer::new(raft_node)
-            .run(addr)
-            .await
-            .unwrap();
-    });
+    info!("websocket server");
+    volo_gen::rpc::raft::RaftServiceServer::new(raft_node)
+        .run(addr)
+        .await
+        .unwrap();
+    Ok(())
+}
 
+pub async fn start_ntex(
+    node_id: NodeId,
+    http_addr: String,
+    rpc_addr: String,
+    leader_http_addr: Option<String>,
+) -> std::io::Result<()> {
     // Create an application that will store all the instances created above, this will
-    // be later used on the actix-web services.
-
+    // be later used on the ntex services.
+    let mut set = BTreeSet::new();
+    set.insert(node_id);
+    let app = HttpServerApp {
+        id: node_id,
+        api_addr: http_addr.clone(),
+        rpc_addr: rpc_addr.clone(),
+        nodes: Arc::new(Mutex::new(set)),
+    };
     let server_start = web::HttpServer::new(move || {
         info!("web server");
-        let app = app.clone();
         web::App::new()
-            .state(app)
+            .state(app.clone())
             .wrap(middleware::Logger::default())
             .configure(api::rest)
             .configure(management::rest())
@@ -156,36 +169,12 @@ where
     .run();
 
     sleep(Duration::from_secs(1)).await;
-    let client = reqwest::Client::new();
-    if let Some(addr) = leader_http_addr {
-        let response = client
-            .post(format!("http://{}/cluster/add-learner", addr))
-            .body(format!(
-                "[{}, \"{}\", \"{}\"]",
-                node_id, http_addr, rpc_addr
-            ))
-            .send()
-            .await
-            .unwrap();
-        info!("cluster add learner resp status {}", response.status());
-        let response = client
-            .post(format!("http://{}/cluster/change-membership", addr))
-            .send()
-            .await
-            .unwrap();
-        info!(
-            "cluster change membership resp status {}",
-            response.status()
-        );
-    } else {
-        let response = client
-            .post(format!("http://{}/cluster/init", http_addr))
-            .body("{}")
-            .send()
-            .await
-            .unwrap();
-        info!("cluster init resp status {}", response.status());
-    }
+    let _ = send_task(InitNodeReq {
+        node_id,
+        http_addr,
+        rpc_addr,
+        leader_http_addr,
+    });
     server_start.await?;
     Ok(())
 }

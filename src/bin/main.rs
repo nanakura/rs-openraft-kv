@@ -1,5 +1,5 @@
 use clap::Parser;
-use raft_demo3::start_example_raft_node;
+use raft_demo3::{mq_handler, start_example_raft_node, start_ntex};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Clone, Debug)]
@@ -19,7 +19,28 @@ pub struct Opt {
 }
 
 #[ntex::main]
-async fn main() -> std::io::Result<()> {
+async fn start_http_server(options: Opt) -> std::io::Result<()> {
+    start_ntex(
+        options.id,
+        format!("{}-db", options.id),
+        options.http_addr,
+        options.leader_http_addr,
+    )
+    .await
+}
+
+#[tokio::main]
+async fn start_raft_server(options: Opt) -> std::io::Result<()> {
+    start_example_raft_node(
+        options.id,
+        format!("{}-db", options.id),
+        options.http_addr,
+        options.rpc_addr,
+    )
+    .await
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup the logger
     tracing_subscriber::fmt()
         .with_target(true)
@@ -29,15 +50,13 @@ async fn main() -> std::io::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // Parse the parameters passed by arguments.
     let options = Opt::parse();
-
-    start_example_raft_node(
-        options.id,
-        format!("{}-db", options.id),
-        options.http_addr,
-        options.rpc_addr,
-        options.leader_http_addr,
-    )
-    .await
+    let options2 = options.clone();
+    let t1 = std::thread::spawn(move || start_raft_server(options.clone()));
+    let t2 = std::thread::spawn(|| mq_handler());
+    let t3 = std::thread::spawn(move || start_http_server(options2.clone()));
+    let _ = t1.join().unwrap();
+    let _ = t2.join().unwrap();
+    let _ = t3.join().unwrap();
+    Ok(())
 }

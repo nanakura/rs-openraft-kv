@@ -36,10 +36,7 @@ impl RaftNetworkFactory<TypeConfig> for Network {
             .address(addr)
             .build();
 
-        NetworkConnection {
-            client,
-            target,
-        }
+        NetworkConnection { client, target }
     }
 }
 

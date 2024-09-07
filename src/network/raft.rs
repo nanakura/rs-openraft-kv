@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use crate::app::App;
+use crate::app::RaftState;
 
 /// Raft protocol service.
 pub struct Raft {
-    app: Arc<App>,
+    app: Arc<RaftState>,
 }
 
 impl Raft {
-    pub fn new(app: Arc<App>) -> Self {
+    pub fn new(app: Arc<RaftState>) -> Self {
         Self { app }
     }
 }

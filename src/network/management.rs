@@ -9,7 +9,7 @@ use openraft::error::Infallible;
 use openraft::RaftMetrics;
 use tracing::info;
 
-use crate::app::App;
+use crate::app::{HttpServerApp, RAFT_CLIENT};
 use crate::network::err::HandlerResponse;
 use crate::Node;
 use crate::NodeId;
@@ -33,7 +33,10 @@ pub fn rest() -> impl Fn(&mut web::ServiceConfig) {
 /// A Learner receives log replication from the leader but does not vote.
 /// This should be done before adding a node as a member into the cluster
 /// (by calling `change-membership`)
-pub async fn add_learner(mut payload: Payload, state: web::types::State<App>) -> HandlerResponse {
+pub async fn add_learner(
+    mut payload: Payload,
+    state: web::types::State<HttpServerApp>,
+) -> HandlerResponse {
     let mut bytes = BytesMut::new();
     while let Some(item) = ntex::util::stream_recv(&mut payload).await {
         bytes.extend_from_slice(&item.unwrap());
@@ -42,20 +45,28 @@ pub async fn add_learner(mut payload: Payload, state: web::types::State<App>) ->
         serde_json::from_slice(&bytes.to_vec()[..]).context("deserialize json failed")?;
     let node = Node { rpc_addr, api_addr };
     state.nodes.lock().await.insert(node_id);
-    let res = state.raft.add_learner(node_id, node, true).await;
+    let res = RAFT_CLIENT
+        .get()
+        .unwrap()
+        .add_learner(node_id, node, true)
+        .await;
     Ok(HttpResponse::Ok().json(&res))
 }
 
 /// Changes specified learners to members, or remove members.
-pub async fn change_membership(state: web::types::State<App>) -> HandlerResponse {
+pub async fn change_membership(state: web::types::State<HttpServerApp>) -> HandlerResponse {
     let x = state.nodes.lock().await;
     let body = (*x).clone();
-    let res = state.raft.change_membership(body, false).await;
+    let res = RAFT_CLIENT
+        .get()
+        .unwrap()
+        .change_membership(body, false)
+        .await;
     Ok(HttpResponse::Ok().json(&res))
 }
 
 /// Initialize a single-node cluster.
-pub async fn init(state: web::types::State<App>) -> HandlerResponse {
+pub async fn init(state: web::types::State<HttpServerApp>) -> HandlerResponse {
     info!("start init");
     let mut nodes = BTreeMap::new();
     let node = Node {
@@ -64,15 +75,15 @@ pub async fn init(state: web::types::State<App>) -> HandlerResponse {
     };
 
     nodes.insert(state.id, node);
-    let res = state.raft.initialize(nodes).await;
+    let res = RAFT_CLIENT.get().unwrap().initialize(nodes).await;
 
     info!("get res: {:?}", res);
     Ok(HttpResponse::Ok().json(&res))
 }
 
 /// Get the latest metrics of the cluster
-pub async fn metrics(state: web::types::State<App>) -> HandlerResponse {
-    let metrics = state.raft.metrics().borrow().clone();
+pub async fn metrics() -> HandlerResponse {
+    let metrics = RAFT_CLIENT.get().unwrap().metrics().borrow().clone();
 
     let res: Result<RaftMetrics<NodeId, Node>, Infallible> = Ok(metrics);
     Ok(HttpResponse::Ok().json(&res))

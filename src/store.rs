@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::ops::RangeBounds;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use byteorder::BigEndian;
 use byteorder::ReadBytesExt;
@@ -27,16 +27,18 @@ use openraft::StorageError;
 use openraft::StorageIOError;
 use openraft::StoredMembership;
 use openraft::Vote;
+use parking_lot::RwLock;
 use serde::Deserialize;
 use serde::Serialize;
 use sled::Db;
-use tokio::sync::RwLock;
 
 use crate::typ;
 use crate::Node;
 use crate::NodeId;
 use crate::SnapshotData;
 use crate::TypeConfig;
+
+pub static KVS: OnceLock<RwLock<BTreeMap<String, String>>> = OnceLock::new();
 
 /**
  * Here you will set the types of request that will interact with the raft nodes.
@@ -89,9 +91,6 @@ pub struct StateMachineData {
     pub last_applied_log_id: Option<LogId<NodeId>>,
 
     pub last_membership: StoredMembership<NodeId, Node>,
-
-    /// State built from applying the raft logs
-    pub kvs: Arc<RwLock<BTreeMap<String, String>>>,
 }
 
 impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
@@ -100,7 +99,7 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
         let last_membership = self.data.last_membership.clone();
 
         let kv_json = {
-            let kvs = self.data.kvs.read().await;
+            let kvs = KVS.get().unwrap().read();
             serde_json::to_vec(&*kvs).map_err(|e| StorageIOError::read_state_machine(&e))?
         };
 
@@ -132,11 +131,11 @@ impl RaftSnapshotBuilder<TypeConfig> for StateMachineStore {
 
 impl StateMachineStore {
     async fn new(db: Arc<Db>) -> Result<StateMachineStore, StorageError<NodeId>> {
+        KVS.get_or_init(|| RwLock::default());
         let mut sm = Self {
             data: StateMachineData {
                 last_applied_log_id: None,
                 last_membership: Default::default(),
-                kvs: Arc::new(Default::default()),
             },
             snapshot_idx: 0,
             db,
@@ -159,7 +158,7 @@ impl StateMachineStore {
 
         self.data.last_applied_log_id = snapshot.meta.last_log_id;
         self.data.last_membership = snapshot.meta.last_membership.clone();
-        let mut x = self.data.kvs.write().await;
+        let mut x = KVS.get().unwrap().write();
         *x = kvs;
 
         Ok(())
@@ -235,7 +234,7 @@ impl RaftStateMachine<TypeConfig> for StateMachineStore {
                     Request::Set { key, value } => {
                         resp_value = Some(value.clone());
 
-                        let mut st = self.data.kvs.write().await;
+                        let mut st = KVS.get().unwrap().write();
                         st.insert(key, value);
                     }
                 },
